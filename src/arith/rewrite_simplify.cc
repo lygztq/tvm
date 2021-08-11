@@ -1548,9 +1548,12 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const CallNode* op) {
   }
   ExprDeepEqual expr_equal;
   if (op->op.same_as(tir::builtin::likely())) {
+    auto condition = analyzer_->Simplify(op->args[0]);
     for (const auto& constraint : literal_constraints_) {
+      LOG(INFO) << "Cmp " << PrettyPrint(constraint) << " and " << PrettyPrint(condition);
       // Cases such as for (i, 0, bound) {if (likely(iter_var < bound)) { .. } }
-      if (expr_equal(constraint, op->args[0])) {
+      if (expr_equal(constraint, condition)) {
+        LOG(INFO) << "True";
         return make_const(op->dtype, true);
       }
     }
