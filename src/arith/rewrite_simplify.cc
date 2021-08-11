@@ -1290,6 +1290,7 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const LTNode* op) {
   PVar<PrimExpr> x, y, z, s1, s2;
   // Pattern var match IntImm
   PVar<IntImm> c1, c2;
+  PVar<PrimExpr> v1, v2;
   PVar<int> lanes;
 
   // vector rule
@@ -1377,6 +1378,8 @@ PrimExpr RewriteSimplifier::Impl::VisitExpr_(const LTNode* op) {
                        y < truncmod(x + c2, c1) + (0 - c2), c1.Eval()->value > 0);
 
     // floordiv
+    TVM_TRY_REWRITE_IF(floordiv(x, v1) < v2, x < v1 * v2,
+                       analyzer_->const_int_bound(v1.Eval())->min_value >= 0);
     TVM_TRY_REWRITE_IF(floordiv(x, c1) < c2, x < c1 * c2, c1.Eval()->value > 0);
     TVM_TRY_REWRITE_IF(c1 < floordiv(x, c2), (c1 + 1) * c2 - 1 < x, c2.Eval()->value > 0);
 

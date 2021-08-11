@@ -375,6 +375,34 @@ class IntSetAnalyzer {
 };
 
 /*!
+ * \brief A checker to check whether a expression is non-negative.
+ * \note This checker is specially for the rewrite simplifier and canonical
+ *  simplifier with symbolic var boundary. We guarantee all positive results
+ *  are true, but negative results may also be derived from non-negative
+ *  expressions since we cannot know the actual bound of some vars at the
+ *  compilation time, especially under dynamic cases.
+ */
+class NonNegativeChecker {
+ public:
+  explicit NonNegativeChecker();
+  TVM_DLL ~NonNegativeChecker();
+
+  /*!
+   * \brief Check whether the given expression is non-negative.
+   * 
+   * \param expr The expression of interest.
+   * \return A boolean value indicating whether the given exprrssion must be
+   *  non-negative. Negative results may also be derived from non-negative
+   *  expressions since we cannot know the actual bound of some vars.
+   */
+  TVM_DLL bool operator()(const PrimExpr& expr);
+ private:
+  class Impl;
+  /*! \brief Internal impl */
+  Impl* impl_;
+};
+
+/*!
  * \brief Analyzer that contains bunch of sub-analyzers.
  *
  * Each sub-analyzer can make use of another sub-analyzer

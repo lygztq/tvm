@@ -753,6 +753,16 @@ PrimExpr CanonicalSimplifier::Impl::VisitExpr_(const MulNode* op) {
   // normal path.
   a = Normalize(a);
   b = Normalize(b);
+
+  // canonical order
+  auto ah = StructuralHash()(a);
+  auto bh = StructuralHash()(b);
+  // LOG(INFO) << "hash(a) = " << ah << ", hash(b) = " << bh;
+  if (ah > bh) {
+    // LOG(INFO) << "swap " << PrettyPrint(a) << " and " << PrettyPrint(b);
+    std::swap(a, b);
+  }
+
   if (op->a.same_as(a) && op->b.same_as(b)) {
     return GetRef<PrimExpr>(op);
   } else {

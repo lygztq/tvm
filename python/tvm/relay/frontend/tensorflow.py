@@ -34,7 +34,7 @@ from .. import analysis
 from .. import expr as _expr
 from .. import function as _function
 from .. import op as _op
-from ..ty import Any
+from ..ty import Any, is_dynamic
 from ..expr_functor import ExprMutator, ExprVisitor
 from .common import AttrCvt, get_relay_op
 from .common import infer_type as _infer_type
@@ -43,6 +43,10 @@ from .common import infer_channels as _infer_channels
 from .common import infer_value as _infer_value
 
 __all__ = ["from_tensorflow"]
+
+
+def is_symbolic_shape(shape):
+    return not all([isinstance(dim, (int, tvm.tir.IntImm)) for dim in shape])
 
 
 def check_symbolic_shape(shape):
@@ -54,6 +58,16 @@ def list_shape_of(tensor, ndim):
     return [
         _op.strided_slice(shape_tensor, begin=[i], end=[i + 1], strides=[1]) for i in range(ndim)
     ]
+
+
+def concat_dynamic_shape(shape_list):
+    new_shape = []
+    for dim in shape_list:
+        if isinstance(dim, (int, tvm.tir.IntImm)):
+            new_shape.append(_op.expand_dims(_op.const(dim, 'int32'), axis=0))
+        else:
+            new_shape.append(dim)
+    return _op.concatenate(_op.Tuple(new_shape), axis=0)
 
 
 def _get_pad_pair(input1d, kernel1d, stride1d):
@@ -2045,7 +2059,11 @@ def _stridedSlice():
         in_type = _infer_type(inputs[0], mod)
         data_shape = get_const_tuple(in_type.checked_type.shape)
         data_dim = len(data_shape)
+        is_dyn_input = is_dynamic(in_type.checked_type)
+        if is_dyn_input:
+            data_shape = list_shape_of(inputs[0], data_dim)
         stride_dim = len(stride)
+
         if data_dim == 0 and isinstance(inputs[0], _expr.Constant):
             new_data = inputs[0].data.numpy().reshape(1)
             return _expr.const(new_data, inputs[0].data.dtype)
@@ -2152,10 +2170,18 @@ def _stridedSlice():
         fshape_indices = None
         if begin_mask or end_mask or ellipsis_mask or new_axis_mask or shrink_axis_mask:
             begin, end, stride, fshape_indices = _transform_mask(stride_dim, ellipsis_mask)
+
+        if is_dyn_input:
+            end = concat_dynamic_shape(end)
+
         out = _op.strided_slice(inputs[0], begin=begin, end=end, strides=stride)
         out_shape = _infer_shape(out, mod=mod)
+        # print(out_shape)
         if not fshape_indices:
-            fshape_indices = range(len(out_shape))
+            fshape_indices = list(range(len(out_shape)))
+        
+        if fshape_indices == list(range(len(out_shape))):
+            return out
 
         # Create final output shape.
         final_output = []
@@ -2166,6 +2192,22 @@ def _stridedSlice():
                 pass
             else:
                 final_output.append(out_shape[gather_index])
+            
+        if final_output and is_symbolic_shape(final_output):
+            out_shape = _op.shape_of(out)
+
+            # add new axis for dynamic shape
+            new_axis_idx = [int(i == -1) for i in fshape_indices]
+            fshape_indices_dim = len(fshape_indices)
+            final_output = _op.where(_op.const(new_axis_idx), _op.cast_like(_op.const([1] * fshape_indices_dim), out_shape), out_shape)
+
+            new_axis_idx = []
+            for idx in range(fshape_indices_dim):
+                if fshape_indices[idx] != -2:
+                    new_axis_idx.append(idx)
+            final_output = _op.gather(final_output, 0, _op.const(new_axis_idx))
+
+            return _op.reshape(out, newshape=final_output)
 
         if not final_output:
             if not shrink_axis_mask:
@@ -3399,7 +3441,7 @@ class GraphProto(object):
 
         # Use tensor array gather to infer static tensor array shape
         for gather_node in ta_gather_nodes:
-            input_ta_name = gather_node.input[0]
+            input_ta_name = gather_node.input[0] # tensorarray name
             input_ta_node = self._tf_node_map[input_ta_name]
             if is_tensor_array_constuctor(input_ta_node):
                 gather_attr = self._parse_attr(gather_node.attr)

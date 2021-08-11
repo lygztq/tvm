@@ -86,7 +86,8 @@ Array<IndexExpr> GetShape(const Array<IndexExpr>& shape) {
       res.push_back(val);
 #endif  // TVM_INDEX_DEFAULT_I64
     } else if (val->IsInstance<tir::AnyNode>()) {
-      res.push_back(val.as<tir::AnyNode>()->ToVar());
+      // res.push_back(val.as<tir::AnyNode>()->ToVar());
+      res.push_back(val.as<tir::AnyNode>()->ToSizeVar());
     } else {
       res.push_back(val);
     }

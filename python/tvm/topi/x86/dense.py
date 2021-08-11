@@ -178,7 +178,10 @@ def dense_nopack(cfg, data, weight, bias=None, out_dtype=None):
         _default_dense_nopack_config(cfg, M, N, K)
 
     vec = cfg["tile_k"].size[-1]
-    k = te.reduce_axis((0, K // vec), "k")
+    if isinstance(K, (tvm.tir.Var, tvm.tir.Any)):
+        k = te.reduce_axis((0, tvm.tir.floordiv(K, vec)), "k")
+    else:
+        k = te.reduce_axis((0, K // vec), "k")
     CC = te.compute(
         (M, N, vec),
         lambda z, y, x: te.sum(
